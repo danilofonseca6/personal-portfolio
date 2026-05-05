@@ -1,0 +1,30 @@
+*, *::before, *::after {
+    box-sizing: border-box;
+}
+
+html, body, #root {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: #000;
+    overflow: hidden;
+}
+
+:root {
+    /* CRT palette — tuned for green phosphor */
+    --phosphor: #33ff66;
+    --phosphor-dim: #1a8033;
+    --phosphor-glow: #66ff99;
+    --crt-bg: #001100;
+    --crt-bezel: #1a1a1a;
+
+    /* Type */
+    --font-mono: "VT323", "Courier New", ui-monospace, monospace;
+}
+
+body {
+    font-family: var(--font-mono);
+    color: var(--phosphor);
+    -webkit-font-smoothing: none; /* we WANT pixelated text */
+    font-smooth: never;
+}
