@@ -1,0 +1,33 @@
+.section {
+    position: relative;
+    min-height: 100vh;
+    z-index: 1;
+}
+
+.content {
+    position: relative;
+    z-index: 1;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    padding: var(--s-12) var(--s-6);
+    box-sizing: border-box;
+}
+
+.cardLeft {
+    margin-right: auto;
+    max-width: 560px;
+    width: 100%;
+}
+
+.cardRight {
+    margin-left: auto;
+    max-width: 560px;
+    width: 100%;
+}
+
+.cardCenter {
+    margin: 0 auto;
+    max-width: 720px;
+    width: 100%;
+}

@@ -1,0 +1,38 @@
+:root {
+    /* Base */
+    --bg:           #0a0e0c;
+    --bg-elevated:  #121814;
+    --fg:           #e0ffe8;
+    --fg-muted:     #8aa897;
+    --fg-dim:       #4a5d54;
+
+    /* Accents */
+    --green:        #33ff66;
+    --green-dim:    #1a9942;
+    --cyan:         #66d9ff;
+    --cyan-dim:     #2a8db8;
+
+    /* Type */
+    --font-mono:    "IBM Plex Mono", "JetBrains Mono", "Courier New", monospace;
+    --font-sans:    "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+
+    /* Spacing scale (8px base) */
+    --s-1:  0.5rem;
+    --s-2:  1rem;
+    --s-3:  1.5rem;
+    --s-4:  2rem;
+    --s-6:  3rem;
+    --s-8:  4rem;
+    --s-12: 6rem;
+    --s-16: 8rem;
+
+    /* Type scale */
+    --type-xs:   0.75rem;
+    --type-sm:   0.875rem;
+    --type-base: 1rem;
+    --type-lg:   1.25rem;
+    --type-xl:   1.5rem;
+    --type-2xl:  2rem;
+    --type-3xl:  3rem;
+    --type-hero: clamp(3rem, 12vw, 9rem);
+}
