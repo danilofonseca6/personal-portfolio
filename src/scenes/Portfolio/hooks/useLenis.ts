@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import Lenis from "lenis";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { lenisStore } from "../lenisStore";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -25,6 +26,8 @@ export function useLenis() {
             touchMultiplier: 1.5,
         });
 
+        lenisStore.instance = lenis;
+
         // Tell ScrollTrigger to recheck on every Lenis scroll event
         lenis.on("scroll", ScrollTrigger.update);
 
@@ -38,6 +41,7 @@ export function useLenis() {
         return () => {
             gsap.ticker.remove(tick);
             lenis.destroy();
+            lenisStore.instance = null;
         };
     }, []);
 }

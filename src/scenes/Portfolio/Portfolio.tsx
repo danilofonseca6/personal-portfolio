@@ -1,6 +1,8 @@
 import { useLenis } from "./hooks/useLenis";
 import { Hero } from "./components/Hero";
 import { About } from "./components/About";
+import { Skills } from "./components/Skills";
+import { Experience } from "./components/Experience";
 import { NowWorking } from "./components/NowWorking";
 import { PortfolioBackground } from "./components/PortfolioBackground";
 import styles from "./styles/portfolio.module.css";
@@ -14,6 +16,8 @@ export function Portfolio() {
             <main className={styles.main}>
                 <Hero />
                 <About />
+                <Skills />
+                <Experience />
                 <NowWorking />
             </main>
         </div>

@@ -8,10 +8,12 @@ gsap.registerPlugin(ScrollTrigger);
 type SectionProps = {
     id: string;
     side?: "left" | "right" | "center";
+    wide?: boolean;
+    compact?: boolean;
     children: ReactNode;
 };
 
-export function Section({ id, side = "left", children }: SectionProps) {
+export function Section({ id, side = "left", wide = false, compact = false, children }: SectionProps) {
     const sectionRef = useRef<HTMLElement>(null);
     const cardRef = useRef<HTMLDivElement>(null);
 
@@ -20,39 +22,33 @@ export function Section({ id, side = "left", children }: SectionProps) {
         const card = cardRef.current;
         if (!section || !card) return;
 
-        const fromX = side === "left" ? -80 : side === "right" ? 80 : 0;
-        const tween = gsap.fromTo(
-            card,
-            { x: fromX, y: 20, opacity: 0, scale: 0.97 },
-            {
-                x: 0,
-                y: 0,
-                opacity: 1,
-                scale: 1,
-                duration: 1.2,
-                ease: "power3.out",
-                scrollTrigger: {
-                    trigger: section,
-                    start: "top center",  // fires at scroll=50vh — card rising into view
-                    once: true,
-                },
-            }
-        );
+        gsap.set(card, { scale: 0.4, opacity: 0 });
+
+        const tl = gsap.timeline({
+            scrollTrigger: {
+                trigger: section,
+                start: "top center",
+                once: true,
+            },
+        });
+
+        tl.to(card, { scale: 1.07, opacity: 1, duration: 0.38, ease: "power4.out" })
+          .to(card, { scale: 1, duration: 0.6, ease: "elastic.out(1, 0.42)" });
 
         return () => {
-            tween.scrollTrigger?.kill();
-            tween.kill();
+            tl.scrollTrigger?.kill();
+            tl.kill();
         };
-    }, [side]);
+    }, []);
 
     const cardClass =
-        side === "left" ? styles.cardLeft :
-            side === "right" ? styles.cardRight :
-                styles.cardCenter;
+        side === "left"  ? (wide ? styles.cardLeftWide  : styles.cardLeft)  :
+        side === "right" ? (wide ? styles.cardRightWide : styles.cardRight) :
+        styles.cardCenter;
 
     return (
-        <section id={id} ref={sectionRef} className={styles.section}>
-            <div className={styles.content}>
+        <section id={id} ref={sectionRef} className={`${styles.section} ${compact ? styles.sectionCompact : ""}`}>
+            <div className={`${styles.content} ${compact ? styles.contentCompact : ""}`}>
                 <div ref={cardRef} className={cardClass}>
                     {children}
                 </div>

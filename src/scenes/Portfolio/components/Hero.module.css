@@ -1,13 +1,12 @@
 .hero {
-    position: sticky;
-    top: 0;
     min-height: 100vh;
     display: flex;
     align-items: center;
     justify-content: flex-start;
     padding: var(--s-8) var(--s-6);
     box-sizing: border-box;
-    z-index: 0;
+    overflow: hidden;
+    pointer-events: auto;
 }
 
 .content {

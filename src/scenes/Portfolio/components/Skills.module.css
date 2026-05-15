@@ -12,49 +12,42 @@
     font-family: var(--font-mono);
     font-size: var(--type-xs);
     text-transform: uppercase;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.1em;
     color: var(--fg-muted);
-    margin-bottom: var(--s-2);
-}
-
-.bio {
-    font-family: var(--font-sans);
-    font-size: var(--type-base);
-    line-height: 1.7;
-    color: var(--fg-muted);
-    margin: 0 0 var(--s-3);
-}
-
-.bio strong {
-    color: var(--fg);
-    font-weight: 500;
-}
-
-.meta {
-    display: flex;
-    flex-direction: column;
-    gap: 0.35rem;
     margin-bottom: var(--s-3);
 }
 
-.metaItem {
-    font-family: var(--font-mono);
-    font-size: var(--type-xs);
-    color: var(--fg-muted);
+.groups {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-3);
 }
 
-.stack {
+.group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-1);
+}
+
+.category {
+    font-family: var(--font-mono);
+    font-size: var(--type-xs);
+    color: var(--green);
+    letter-spacing: 0.06em;
+}
+
+.chips {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--s-1);
+    gap: calc(var(--s-1) * 0.6);
 }
 
 .chip {
     font-family: var(--font-mono);
     font-size: var(--type-xs);
-    padding: 0.25rem 0.6rem;
+    padding: 0.2rem 0.55rem;
     border: 1px solid var(--green-dim);
     border-radius: 2px;
-    color: var(--green);
-    background: rgba(51, 255, 102, 0.05);
+    color: var(--fg-muted);
+    background: rgba(51, 255, 102, 0.03);
 }

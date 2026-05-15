@@ -1,109 +1,348 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef, useMemo } from "react";
+import { Canvas, useFrame } from "@react-three/fiber";
+import * as THREE from "three";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { cameraTarget } from "../cameraStore";
 
 gsap.registerPlugin(ScrollTrigger);
 
-const NODE_COUNT = 45;
-const EDGE_DENSITY = 1.6;
-const WANDER_DURATION = 8;
+// ─── constants ────────────────────────────────────────────────────────────────
+const NODE_COUNT      = 80;
+const KNN_K           = 3;
+const NODE_COLOR      = new THREE.Color("#33ff66");  // --green
+const EDGE_COLOR      = new THREE.Color("#1a9942");  // --green-dim
+const LERP            = 0.04;
+const AUTO_ROT_Y      = 0.0005;
+// fov=50, camera z=7 → visible half-width ≈ 5.8 (x) / 3.25 (y); ±12/±7 puts most nodes off-screen
+const CLOUD_X         = 24;   // spread in x
+const CLOUD_Y         = 14;   // spread in y
+const DRAG_THRESHOLD      = 5;    // px before a pointer-down becomes a drag
+const DRAG_SENS           = 0.007; // rad / px
+const HERO_EDGE_MAX_DIST  = 2.8;  // in hero mode, hide edges longer than this → disconnected look
 
-type Node = { id: number; x: number; y: number };
-type Edge = { from: number; to: number };
-
-function buildGraph(): { nodes: Node[]; edges: Edge[] } {
-    const nodes: Node[] = Array.from({ length: NODE_COUNT }, (_, i) => ({
-        id: i,
-        x: Math.random(),
-        y: Math.random(),
-    }));
-    const k = Math.round(EDGE_DENSITY);
-    const edges: Edge[] = [];
-    const seen = new Set<string>();
-    for (const node of nodes) {
-        const distances = nodes
-            .filter((other) => other.id !== node.id)
-            .map((other) => ({ id: other.id, d: Math.hypot(other.x - node.x, other.y - node.y) }))
-            .sort((a, b) => a.d - b.d)
-            .slice(0, k);
-        for (const { id: otherId } of distances) {
-            const key = node.id < otherId ? `${node.id}-${otherId}` : `${otherId}-${node.id}`;
-            if (!seen.has(key)) {
-                seen.add(key);
-                edges.push({ from: node.id, to: otherId });
-            }
-        }
-    }
-    return { nodes, edges };
+// ─── shape generators — return NODE_COUNT Vector3s centred at origin ──────────
+function genSphere(n: number): THREE.Vector3[] {
+    const phi = Math.PI * (3 - Math.sqrt(5));
+    return Array.from({ length: n }, (_, i) => {
+        const y = 1 - (i / (n - 1)) * 2;
+        const r = Math.sqrt(1 - y * y);
+        return new THREE.Vector3(r * Math.cos(phi * i), y, r * Math.sin(phi * i)).multiplyScalar(2);
+    });
 }
 
-export function PortfolioBackground() {
-    const svgRef = useRef<SVGSVGElement>(null);
-    const wrapperRef = useRef<HTMLDivElement>(null);
-    const { nodes, edges } = useMemo(() => buildGraph(), []);
+function genTorus(n: number): THREE.Vector3[] {
+    const R = 1.6, r = 0.6;
+    return Array.from({ length: n }, (_, i) => {
+        const u = (2 * Math.PI * i) / n;
+        const v = (2 * Math.PI * i * 7) / n;
+        return new THREE.Vector3(
+            (R + r * Math.cos(v)) * Math.cos(u),
+            r * Math.sin(v),
+            (R + r * Math.cos(v)) * Math.sin(u),
+        );
+    });
+}
 
-    // Wander nodes
+function genTorusKnot(n: number): THREE.Vector3[] {
+    const p = 2, q = 3, scale = 1.4;
+    return Array.from({ length: n }, (_, i) => {
+        const t = (2 * Math.PI * i) / n;
+        return new THREE.Vector3(
+            scale * (2 + Math.cos(q * t)) * Math.cos(p * t),
+            scale * (2 + Math.cos(q * t)) * Math.sin(p * t),
+            scale * Math.sin(q * t),
+        );
+    });
+}
+
+function genIcosahedron(n: number): THREE.Vector3[] {
+    const geo  = new THREE.IcosahedronGeometry(2, 2);
+    const pos  = geo.attributes.position!;
+    const seen = new Map<string, THREE.Vector3>();
+    for (let i = 0; i < pos.count; i++) {
+        const v   = new THREE.Vector3().fromBufferAttribute(pos, i);
+        const key = `${v.x.toFixed(4)},${v.y.toFixed(4)},${v.z.toFixed(4)}`;
+        if (!seen.has(key)) seen.set(key, v);
+    }
+    const unique = Array.from(seen.values());
+    while (unique.length < n) unique.push(unique[unique.length % unique.length]!.clone());
+    geo.dispose();
+    return unique.slice(0, n);
+}
+
+function genHelix(n: number): THREE.Vector3[] {
+    return Array.from({ length: n }, (_, i) => {
+        const t = (i / n) * Math.PI * 6;
+        return new THREE.Vector3(Math.cos(t) * 1.8, (i / n) * 4 - 2, Math.sin(t) * 1.8);
+    });
+}
+
+function genPointCloud(n: number): THREE.Vector3[] {
+    // z=0: perfectly flat so it reads as a 2D network graph, not 3D
+    return Array.from({ length: n }, () =>
+        new THREE.Vector3(
+            (Math.random() - 0.5) * CLOUD_X,
+            (Math.random() - 0.5) * CLOUD_Y,
+            0,
+        )
+    );
+}
+
+// ─── KNN edges ────────────────────────────────────────────────────────────────
+function computeEdges(pts: THREE.Vector3[], k: number): number[] {
+    const indices: number[] = [];
+    const seen = new Set<string>();
+    for (let i = 0; i < pts.length; i++) {
+        const closest = pts
+            .map((p, j) => ({ j, d: pts[i]!.distanceTo(p) }))
+            .filter(({ j }) => j !== i)
+            .sort((a, b) => a.d - b.d)
+            .slice(0, k);
+        for (const { j } of closest) {
+            const key = i < j ? `${i}-${j}` : `${j}-${i}`;
+            if (!seen.has(key)) { seen.add(key); indices.push(i, j); }
+        }
+    }
+    return indices;
+}
+
+// ─── section → shape ──────────────────────────────────────────────────────────
+type ShapeKey = "pointCloud" | "sphere" | "torus" | "torusKnot" | "icosahedron" | "helix";
+
+const SECTION_SHAPES: { id: string; shape: ShapeKey; groupX: number }[] = [
+    { id: "hero",        shape: "pointCloud",  groupX:  0   },
+    { id: "about",       shape: "sphere",      groupX: -2.2 },
+    { id: "skills",      shape: "torus",       groupX:  2.2 },
+    { id: "exp-menzies", shape: "helix",       groupX: -2.2 },
+    { id: "exp-jlr",     shape: "torusKnot",   groupX:  2.2 },
+    { id: "exp-ymat",    shape: "sphere",       groupX: -2.2 },
+    { id: "now-working", shape: "icosahedron", groupX:  2.2 },
+];
+
+// ─── Scene ────────────────────────────────────────────────────────────────────
+function Scene() {
+    const shapes = useMemo<Record<ShapeKey, THREE.Vector3[]>>(() => ({
+        pointCloud:  genPointCloud(NODE_COUNT),
+        sphere:      genSphere(NODE_COUNT),
+        torus:       genTorus(NODE_COUNT),
+        torusKnot:   genTorusKnot(NODE_COUNT),
+        icosahedron: genIcosahedron(NODE_COUNT),
+        helix:       genHelix(NODE_COUNT),
+    }), []);
+
+    const positions   = useRef<THREE.Vector3[]>(Array.from({ length: NODE_COUNT }, () => new THREE.Vector3()));
+    const wanderTgts  = useRef<THREE.Vector3[]>(Array.from({ length: NODE_COUNT }, () => new THREE.Vector3()));
+    const targetShape = useRef<ShapeKey>("pointCloud");
+    const groupRef    = useRef<THREE.Group>(null);
+
+    // drag state — timestamp-based so there's no setTimeout to lose
+    const isDragging  = useRef(false);   // true while pointer is down and moving past threshold
+    const dragEndedAt = useRef(0);       // performance.now() when last drag ended; 0 = never dragged
+    const RESUME_MS   = 2000;            // ms after release before auto-rotate resumes
+    const dragDeltaY  = useRef(0);       // horizontal drag → rotation.y
+    const dragDeltaX  = useRef(0);       // vertical drag   → rotation.x
+
+    // ── geometry ──
+    const nodesMesh = useMemo(() => {
+        const geo  = new THREE.SphereGeometry(0.045, 6, 6);
+        const mat  = new THREE.MeshBasicMaterial({ color: NODE_COLOR, transparent: true, opacity: 0.85 });
+        const mesh = new THREE.InstancedMesh(geo, mat, NODE_COUNT);
+        mesh.frustumCulled = false;
+        return mesh;
+    }, []);
+
+    const edgeIdx = useMemo(() => computeEdges(shapes.sphere, KNN_K), [shapes.sphere]);
+    const lineGeo = useMemo(() => {
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(edgeIdx.length * 3), 3));
+        return geo;
+    }, [edgeIdx]);
+    const lineMesh = useMemo(() =>
+        new THREE.LineSegments(
+            lineGeo,
+            new THREE.LineBasicMaterial({ color: EDGE_COLOR, transparent: true, opacity: 0.5 }),
+        ), [lineGeo]);
+
     useEffect(() => {
-        const svg = svgRef.current;
-        if (!svg) return;
-        const nodeEls = nodes.map((n) => svg.querySelector<SVGCircleElement>(`#pbg-node-${n.id}`));
-        const edgeEls = edges.map((_, i) => svg.querySelector<SVGLineElement>(`#pbg-edge-${i}`));
-        const sim = nodes.map((n) => ({ ...n }));
+        const g = groupRef.current;
+        if (!g) return;
+        g.add(nodesMesh);
+        g.add(lineMesh);
+        return () => { g.remove(nodesMesh); g.remove(lineMesh); };
+    }, [nodesMesh, lineMesh]);
 
-        sim.forEach((node) => {
-            const wander = () => {
-                gsap.to(node, {
-                    x: Math.random(),
-                    y: Math.random(),
-                    duration: WANDER_DURATION * (0.7 + Math.random() * 0.6),
-                    ease: "sine.inOut",
-                    onComplete: wander,
-                });
+    useEffect(() => {
+        const cloud = shapes.pointCloud;
+        positions.current.forEach((p, i)  => p.copy(cloud[i]!));
+        wanderTgts.current.forEach((t, i) => t.copy(cloud[i]!));
+    }, [shapes]);
+
+    // ── wander ──
+    const wanderOn = useRef(false);
+    const tweens   = useRef<gsap.core.Tween[]>([]);
+
+    function startWander() {
+        if (wanderOn.current) return;
+        wanderOn.current = true;
+        tweens.current.forEach(t => t.kill());
+        tweens.current = wanderTgts.current.map((tgt) => {
+            const go = (): gsap.core.Tween => gsap.to(tgt, {
+                x: (Math.random() - 0.5) * CLOUD_X,
+                y: (Math.random() - 0.5) * CLOUD_Y,
+                z: 0, // stay flat — depth appears only when shapes form
+                duration: 10 + Math.random() * 8,
+                ease: "sine.inOut",
+                onComplete: () => { if (wanderOn.current) go(); },
+            });
+            return go();
+        });
+    }
+
+    function stopWander() {
+        wanderOn.current = false;
+        tweens.current.forEach(t => t.kill());
+        tweens.current = [];
+    }
+
+    // ── scroll → shape + slide ──
+    useEffect(() => {
+        const group = groupRef.current;
+        if (!group) return;
+        startWander();
+
+        const triggers = SECTION_SHAPES.map(({ id, shape, groupX }) => {
+            const el = document.getElementById(id);
+            if (!el) return null;
+            const apply = () => {
+                targetShape.current = shape;
+                if (shape === "pointCloud") startWander(); else stopWander();
+                gsap.to(group.position, { x: groupX, duration: 1.2, ease: "power2.inOut" });
             };
-            wander();
+            return ScrollTrigger.create({
+                trigger: el,
+                start: id === "hero" ? "top top" : "top center",
+                end:   "bottom center",
+                onEnter:     apply,
+                onEnterBack: apply,
+            });
         });
 
-        const tick = () => {
-            for (let i = 0; i < sim.length; i++) {
-                const node = sim[i];
-                const el = nodeEls[i];
-                if (node && el) {
-                    el.setAttribute("cx", String(node.x * 100));
-                    el.setAttribute("cy", String(node.y * 100));
-                }
+        return () => { stopWander(); triggers.forEach(t => t?.kill()); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // ── drag-to-rotate (window-level, threshold-gated) ──
+    useEffect(() => {
+        let startX = 0, startY = 0;
+        let downX  = 0, downY  = 0;
+
+        const onDown = (e: PointerEvent) => {
+            startX = e.clientX; startY = e.clientY;
+            downX  = e.clientX; downY  = e.clientY;
+            isDragging.current = false;
+        };
+
+        const onMove = (e: PointerEvent) => {
+            if (e.buttons === 0) return;
+            const totalMoved = Math.hypot(e.clientX - startX, e.clientY - startY);
+            if (!isDragging.current && totalMoved > DRAG_THRESHOLD) {
+                isDragging.current = true;
+                dragEndedAt.current = Infinity; // suppress resume while actively dragging
             }
-            for (let i = 0; i < edges.length; i++) {
-                const e = edges[i];
-                const el = edgeEls[i];
-                if (!e || !el) continue;
-                const a = sim[e.from];
-                const b = sim[e.to];
-                if (!a || !b) continue;
-                el.setAttribute("x1", String(a.x * 100));
-                el.setAttribute("y1", String(a.y * 100));
-                el.setAttribute("x2", String(b.x * 100));
-                el.setAttribute("y2", String(b.y * 100));
+            if (isDragging.current) {
+                dragDeltaY.current += (e.clientX - downX) * DRAG_SENS;
+                dragDeltaX.current += (e.clientY - downY) * DRAG_SENS;
+            }
+            downX = e.clientX; downY = e.clientY;
+        };
+
+        const onUp = () => {
+            if (isDragging.current) {
+                isDragging.current = false;
+                dragEndedAt.current = performance.now(); // start the resume countdown
             }
         };
 
-        gsap.ticker.add(tick);
+        window.addEventListener("pointerdown", onDown);
+        window.addEventListener("pointermove", onMove);
+        window.addEventListener("pointerup",   onUp);
         return () => {
-            gsap.ticker.remove(tick);
-            sim.forEach((node) => gsap.killTweensOf(node));
+            window.removeEventListener("pointerdown", onDown);
+            window.removeEventListener("pointermove", onMove);
+            window.removeEventListener("pointerup",   onUp);
         };
-    }, [nodes, edges]);
+    }, []);
 
-    // Dim slightly as sections scroll into view so cards read clearly against it
+    const mat4 = useMemo(() => new THREE.Matrix4(), []);
+
+    useFrame(({ camera }) => {
+        const group = groupRef.current;
+        if (!group) return;
+
+        // lerp camera z toward whatever cameraStore requests (card zoom-in / zoom-out)
+        camera.position.z += (cameraTarget.z - camera.position.z) * 0.06;
+
+        // auto-rotate only once a 3D shape is visible and enough time has passed since last drag
+        const resting = !isDragging.current && (performance.now() - dragEndedAt.current > RESUME_MS);
+        if (resting && targetShape.current !== "pointCloud") group.rotation.y += AUTO_ROT_Y;
+
+        // drag rotation disabled in hero (pointCloud) mode
+        if (targetShape.current !== "pointCloud" && (dragDeltaY.current !== 0 || dragDeltaX.current !== 0)) {
+            group.rotation.y += dragDeltaY.current;
+            group.rotation.x += dragDeltaX.current;
+        }
+        dragDeltaY.current = 0;
+        dragDeltaX.current = 0;
+
+        const isCloud = targetShape.current === "pointCloud";
+        const target  = shapes[targetShape.current];
+
+        positions.current.forEach((p, i) => {
+            p.lerp(isCloud ? wanderTgts.current[i]! : target[i]!, LERP);
+            mat4.makeTranslation(p.x, p.y, p.z);
+            nodesMesh.setMatrixAt(i, mat4);
+        });
+        nodesMesh.instanceMatrix.needsUpdate = true;
+
+        const posAttr = lineGeo.attributes.position as THREE.BufferAttribute;
+        const arr     = posAttr.array as Float32Array;
+        for (let e = 0; e < edgeIdx.length; e += 2) {
+            const a    = positions.current[edgeIdx[e]!]!;
+            const b    = positions.current[edgeIdx[e + 1]!]!;
+            const base = e * 3;
+            // In hero mode, collapse edges between distant nodes so they vanish
+            const hide = isCloud && a.distanceTo(b) > HERO_EDGE_MAX_DIST;
+            arr[base]     = a.x; arr[base + 1] = a.y; arr[base + 2] = a.z;
+            arr[base + 3] = hide ? a.x : b.x;
+            arr[base + 4] = hide ? a.y : b.y;
+            arr[base + 5] = hide ? a.z : b.z;
+        }
+        posAttr.needsUpdate = true;
+    });
+
+    return (
+        <>
+            <fog attach="fog" args={["#0a0e0c", 9, 22]} />
+            <group ref={groupRef} />
+        </>
+    );
+}
+
+// ─── wrapper ──────────────────────────────────────────────────────────────────
+export function PortfolioBackground() {
+    const wrapperRef = useRef<HTMLDivElement>(null);
+
     useEffect(() => {
         const wrapper = wrapperRef.current;
         if (!wrapper) return;
         const t = gsap.fromTo(wrapper, { opacity: 1 }, {
-            opacity: 0.2,
+            opacity: 0.25,
             ease: "none",
             scrollTrigger: {
-                trigger: "#now-working",
+                trigger: "#about",
                 start: "top bottom",
-                end: "top top",
+                end:   "top top",
                 scrub: 0.8,
             },
         });
@@ -116,19 +355,13 @@ export function PortfolioBackground() {
             style={{ position: "fixed", inset: 0, width: "100vw", height: "100vh", zIndex: 0, pointerEvents: "none" }}
             aria-hidden="true"
         >
-            <svg
-                ref={svgRef}
-                viewBox="0 0 100 100"
-                preserveAspectRatio="xMidYMid slice"
-                style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0.35 }}
+            <Canvas
+                camera={{ position: [0, 0, 7], fov: 50 }}
+                style={{ width: "100%", height: "100%" }}
+                gl={{ antialias: true, alpha: true }}
             >
-                {edges.map((_, i) => (
-                    <line key={i} id={`pbg-edge-${i}`} stroke="var(--green-dim)" strokeWidth="0.08" strokeOpacity="0.6" />
-                ))}
-                {nodes.map((n) => (
-                    <circle key={n.id} id={`pbg-node-${n.id}`} r="0.3" fill="var(--green)" />
-                ))}
-            </svg>
+                <Scene />
+            </Canvas>
         </div>
     );
 }
