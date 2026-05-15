@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+public/models/textures
+public/models/crt-old.glb
+public/models/crt2.glb
+public/models/textures.zip
