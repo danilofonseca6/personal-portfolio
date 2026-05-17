@@ -2,7 +2,8 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import gsap from "gsap";
 import { Section } from "./Section";
 import { cameraTarget } from "../cameraStore";
-import { lenisStore } from "../lenisStore";
+import { 
+    lenisStore } from "../lenisStore";
 import styles from "./Experience.module.css";
 
 type Job = {
@@ -194,12 +195,27 @@ export function Experience() {
     const open = useCallback((id: string) => {
         setActiveId(id);
         cameraTarget.z = 1.5;
-        lenisStore.instance?.stop();
+
+        // Scroll the section to the viewport centre, then lock scroll
+        const sectionEl = document.getElementById(id);
+        if (sectionEl && lenisStore.instance) {
+            lenisStore.instance.scrollTo(sectionEl, {
+                offset:   -(window.innerHeight - sectionEl.offsetHeight) / 2,
+                duration: 0.55,
+                easing:   (t: number) => 1 - Math.pow(1 - t, 3),
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                onComplete: () => { lenisStore.stopped = true; (lenisStore.instance as any)?.stop(); },
+            });
+        } else {
+            lenisStore.stopped = true;
+            lenisStore.instance?.stop();
+        }
     }, []);
 
     const close = useCallback(() => {
         setActiveId(null);
         cameraTarget.z = 7;
+        lenisStore.stopped = false;
         lenisStore.instance?.start();
     }, []);
 

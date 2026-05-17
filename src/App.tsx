@@ -2,6 +2,7 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { Environment } from "@react-three/drei";
 import { CRTMonitor } from "./scenes/Terminal/CRTMonitor";
+import { Room } from "./scenes/Terminal/Room";
 import { Portfolio } from "./scenes/Portfolio/Portfolio";
 import { ACESFilmicToneMapping, PerspectiveCamera } from "three";
 import { EffectComposer, Bloom } from "@react-three/postprocessing";
@@ -82,6 +83,7 @@ export default function App() {
                 <Canvas
                     camera={{ position: [0, 0, CAMERA_OFF.z], fov: CAMERA_OFF.fov }}
                     style={{ width: "100vw", height: "100vh", background: "#0a0a0a" }}
+                    shadows
                     gl={{
                         antialias: true,
                         powerPreference: "high-performance",
@@ -108,19 +110,11 @@ export default function App() {
                             onDive={handleDive}
                             onDiveComplete={handleDiveComplete}
                         />
+                        <Room />
 
-                        <mesh
-                            position={[0, -0.6, 0]}
-                            rotation={[-Math.PI / 2, 0, 0]}
-                            receiveShadow
-                        >
-                            <planeGeometry args={[10, 10]} />
-                            <meshStandardMaterial color="#0a0a0a" roughness={0.9} metalness={0} />
-                        </mesh>
-                        <Environment preset="studio" background={false} environmentIntensity={0.2} />
-                        <directionalLight position={[2, 3, -2]} intensity={1.0} color="#fff0d0" />
-                        <directionalLight position={[-2, 1, -1]} intensity={0.15} color="#a0b8d0" />
-                        <directionalLight position={[0, 2, 3]} intensity={0.3} color="#ffe0c0" />
+                        <Environment preset="studio" background={false} environmentIntensity={0.15} />
+                        <directionalLight position={[2, 3, -2]} intensity={0.8} color="#fff0d0" />
+                        <directionalLight position={[-2, 1, -1]} intensity={0.1} color="#a0b8d0" />
 
                         <EffectComposer>
                             <Bloom

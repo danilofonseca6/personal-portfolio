@@ -8,11 +8,11 @@ import { cameraTarget } from "../cameraStore";
 gsap.registerPlugin(ScrollTrigger);
 
 // ─── constants ────────────────────────────────────────────────────────────────
-const NODE_COUNT      = 80;
+const NODE_COUNT      = 130; // 56 front + 56 back + 10 spine ridge + 8 belly ridge
 const KNN_K           = 3;
 const NODE_COLOR      = new THREE.Color("#33ff66");  // --green
 const EDGE_COLOR      = new THREE.Color("#1a9942");  // --green-dim
-const LERP            = 0.04;
+const LERP            = 0.08;
 const AUTO_ROT_Y      = 0.0005;
 // fov=50, camera z=7 → visible half-width ≈ 5.8 (x) / 3.25 (y); ±12/±7 puts most nodes off-screen
 const CLOUD_X         = 24;   // spread in x
@@ -89,6 +89,47 @@ function genPointCloud(n: number): THREE.Vector3[] {
     );
 }
 
+// ─── Jaguar leaper — ellipsoidal body sections ───────────────────────────────
+// Each anatomical section is a Fibonacci-sampled ellipsoid. KNN edges
+// (computed from the jaguar positions) connect sections naturally.
+// Head right (+x), tail left (−x), legs down (−y).
+function genJaguarLeap(n: number): THREE.Vector3[] {
+    const pts: THREE.Vector3[] = [];
+    const S = 0.85;
+    const phi = Math.PI * (3 - Math.sqrt(5));
+
+    function addEllipsoid(count: number, cx: number, cy: number, cz: number,
+                          rx: number, ry: number, rz: number) {
+        for (let i = 0; i < count; i++) {
+            const t     = i / Math.max(1, count - 1);
+            const cosA  = 1 - t * 2;
+            const sinA  = Math.sqrt(Math.max(0, 1 - cosA * cosA));
+            const angle = phi * i;
+            pts.push(new THREE.Vector3(
+                (cx + rx * sinA * Math.cos(angle)) * S,
+                (cy + ry * cosA) * S,
+                (cz + rz * sinA * Math.sin(angle)) * S,
+            ));
+        }
+    }
+
+    addEllipsoid(35, -0.05,  0.22, 0,  1.42, 0.30, 0.36);  // main torso
+    addEllipsoid( 4,  1.15,  0.36, 0,  0.14, 0.16, 0.14);  // neck
+    addEllipsoid(14,  1.58,  0.54, 0,  0.26, 0.20, 0.22);  // skull
+    addEllipsoid( 6,  1.86,  0.40, 0,  0.16, 0.10, 0.12);  // muzzle
+    addEllipsoid( 4,  1.78,  0.28, 0,  0.14, 0.07, 0.10);  // jaw
+    addEllipsoid(15, -0.90,  0.14, 0,  0.50, 0.42, 0.46);  // haunches
+    addEllipsoid(12,  0.88,  0.08, 0,  0.34, 0.36, 0.38);  // front shoulder
+    addEllipsoid(10, -1.26, -0.18, 0,  0.16, 0.32, 0.14);  // back thigh
+    addEllipsoid( 8, -1.50, -0.62, 0,  0.13, 0.16, 0.09);  // back lower leg
+    addEllipsoid( 8,  1.18, -0.35, 0,  0.14, 0.30, 0.13);  // front thigh
+    addEllipsoid( 8,  1.36, -0.68, 0,  0.11, 0.17, 0.08);  // front lower leg
+    addEllipsoid( 6, -2.10,  0.12, 0,  0.52, 0.05, 0.04);  // tail (thin & long)
+    // 35+4+14+6+4+15+12+10+8+8+8+6 = 130
+
+    return pts.slice(0, n);
+}
+
 // ─── KNN edges ────────────────────────────────────────────────────────────────
 function computeEdges(pts: THREE.Vector3[], k: number): number[] {
     const indices: number[] = [];
@@ -108,15 +149,15 @@ function computeEdges(pts: THREE.Vector3[], k: number): number[] {
 }
 
 // ─── section → shape ──────────────────────────────────────────────────────────
-type ShapeKey = "pointCloud" | "sphere" | "torus" | "torusKnot" | "icosahedron" | "helix";
+type ShapeKey = "pointCloud" | "sphere" | "torus" | "torusKnot" | "icosahedron" | "helix" | "jaguarLeap";
 
 const SECTION_SHAPES: { id: string; shape: ShapeKey; groupX: number }[] = [
     { id: "hero",        shape: "pointCloud",  groupX:  0   },
     { id: "about",       shape: "sphere",      groupX: -2.2 },
     { id: "skills",      shape: "torus",       groupX:  2.2 },
     { id: "exp-menzies", shape: "helix",       groupX: -2.2 },
-    { id: "exp-jlr",     shape: "torusKnot",   groupX:  2.2 },
-    { id: "exp-ymat",    shape: "sphere",       groupX: -2.2 },
+    { id: "exp-jlr",     shape: "jaguarLeap",  groupX:  2.2 },
+    { id: "exp-ymat",    shape: "sphere",      groupX: -2.2 },
     { id: "now-working", shape: "icosahedron", groupX:  2.2 },
 ];
 
@@ -126,6 +167,7 @@ function Scene() {
         pointCloud:  genPointCloud(NODE_COUNT),
         sphere:      genSphere(NODE_COUNT),
         torus:       genTorus(NODE_COUNT),
+        jaguarLeap:  genJaguarLeap(NODE_COUNT),
         torusKnot:   genTorusKnot(NODE_COUNT),
         icosahedron: genIcosahedron(NODE_COUNT),
         helix:       genHelix(NODE_COUNT),
@@ -152,25 +194,34 @@ function Scene() {
         return mesh;
     }, []);
 
+    // ── KNN edges (sphere topology — used for all non-jaguar shapes) ──
     const edgeIdx = useMemo(() => computeEdges(shapes.sphere, KNN_K), [shapes.sphere]);
-    const lineGeo = useMemo(() => {
+    const knnLineGeo = useMemo(() => {
         const geo = new THREE.BufferGeometry();
         geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(edgeIdx.length * 3), 3));
         return geo;
     }, [edgeIdx]);
-    const lineMesh = useMemo(() =>
-        new THREE.LineSegments(
-            lineGeo,
-            new THREE.LineBasicMaterial({ color: EDGE_COLOR, transparent: true, opacity: 0.5 }),
-        ), [lineGeo]);
+    const knnLineMesh = useMemo(() =>
+        new THREE.LineSegments(knnLineGeo, new THREE.LineBasicMaterial({ color: EDGE_COLOR, transparent: true, opacity: 0.5 })),
+    [knnLineGeo]);
+
+    // ── Jaguar KNN edges — computed from jaguar positions, not sphere ──
+    const jaguarEdgeIdx = useMemo(() => computeEdges(shapes.jaguarLeap, 4), [shapes.jaguarLeap]);
+    const jaguarLineGeo = useMemo(() => {
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(jaguarEdgeIdx.length * 3), 3));
+        return geo;
+    }, [jaguarEdgeIdx]);
+    const jaguarLineMesh = useMemo(() =>
+        new THREE.LineSegments(jaguarLineGeo, new THREE.LineBasicMaterial({ color: EDGE_COLOR, transparent: true, opacity: 0.5 })),
+    [jaguarLineGeo]);
 
     useEffect(() => {
         const g = groupRef.current;
         if (!g) return;
-        g.add(nodesMesh);
-        g.add(lineMesh);
-        return () => { g.remove(nodesMesh); g.remove(lineMesh); };
-    }, [nodesMesh, lineMesh]);
+        g.add(nodesMesh, knnLineMesh, jaguarLineMesh);
+        return () => { g.remove(nodesMesh); g.remove(knnLineMesh); g.remove(jaguarLineMesh); };
+    }, [nodesMesh, knnLineMesh, jaguarLineMesh]);
 
     useEffect(() => {
         const cloud = shapes.pointCloud;
@@ -305,20 +356,38 @@ function Scene() {
         });
         nodesMesh.instanceMatrix.needsUpdate = true;
 
-        const posAttr = lineGeo.attributes.position as THREE.BufferAttribute;
-        const arr     = posAttr.array as Float32Array;
+        // Toggle which line mesh is visible
+        const isJaguar = targetShape.current === "jaguarLeap";
+        knnLineMesh.visible    = !isJaguar;
+        jaguarLineMesh.visible =  isJaguar;
+
+        // Update KNN line geo (always, so it's ready when switching back)
+        const knnAttr = knnLineGeo.attributes.position as THREE.BufferAttribute;
+        const knnArr  = knnAttr.array as Float32Array;
         for (let e = 0; e < edgeIdx.length; e += 2) {
             const a    = positions.current[edgeIdx[e]!]!;
             const b    = positions.current[edgeIdx[e + 1]!]!;
             const base = e * 3;
-            // In hero mode, collapse edges between distant nodes so they vanish
             const hide = isCloud && a.distanceTo(b) > HERO_EDGE_MAX_DIST;
-            arr[base]     = a.x; arr[base + 1] = a.y; arr[base + 2] = a.z;
-            arr[base + 3] = hide ? a.x : b.x;
-            arr[base + 4] = hide ? a.y : b.y;
-            arr[base + 5] = hide ? a.z : b.z;
+            knnArr[base]     = a.x; knnArr[base + 1] = a.y; knnArr[base + 2] = a.z;
+            knnArr[base + 3] = hide ? a.x : b.x;
+            knnArr[base + 4] = hide ? a.y : b.y;
+            knnArr[base + 5] = hide ? a.z : b.z;
         }
-        posAttr.needsUpdate = true;
+        knnAttr.needsUpdate = true;
+
+        // Update jaguar leap line geo (always, so morph transitions are seamless)
+        const jAttr = jaguarLineGeo.attributes.position as THREE.BufferAttribute;
+        const jArr  = jAttr.array as Float32Array;
+        for (let e = 0; e < jaguarEdgeIdx.length; e += 2) {
+            const a    = positions.current[jaguarEdgeIdx[e]!]!;
+            const b    = positions.current[jaguarEdgeIdx[e + 1]!]!;
+            const base = e * 3;
+            jArr[base]     = a.x; jArr[base + 1] = a.y; jArr[base + 2] = a.z;
+            jArr[base + 3] = b.x; jArr[base + 4] = b.y; jArr[base + 5] = b.z;
+        }
+        jAttr.needsUpdate = true;
+
     });
 
     return (

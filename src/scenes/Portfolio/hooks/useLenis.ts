@@ -6,16 +6,9 @@ import { lenisStore } from "../lenisStore";
 
 gsap.registerPlugin(ScrollTrigger);
 
-/**
- * Sets up Lenis smooth scroll AND wires it into GSAP's ticker + ScrollTrigger.
- *
- * The integration:
- * 1. Lenis intercepts wheel events for smooth scroll
- * 2. On every Lenis scroll, we tell ScrollTrigger to recheck its triggers
- * 3. We drive Lenis from GSAP's ticker (not requestAnimationFrame directly),
- *    so they share the same frame schedule
- * 4. We disable GSAP's default lag-smoothing since Lenis handles that
- */
+// How close to a section centre (as fraction of viewport height) before we snap
+const SNAP_RADIUS = 0.28;
+
 export function useLenis() {
     useEffect(() => {
         const lenis = new Lenis({
@@ -28,20 +21,57 @@ export function useLenis() {
 
         lenisStore.instance = lenis;
 
-        // Tell ScrollTrigger to recheck on every Lenis scroll event
         lenis.on("scroll", ScrollTrigger.update);
 
-        // Drive Lenis from GSAP's ticker so everything shares one frame loop
-        const tick = (time: number) => {
-            lenis.raf(time * 1000);  // GSAP ticker provides time in seconds
-        };
+        const tick = (time: number) => lenis.raf(time * 1000);
         gsap.ticker.add(tick);
         gsap.ticker.lagSmoothing(0);
 
+        // Snap to the nearest section centre after scroll settles.
+        // Only fires within SNAP_RADIUS of a section — gives gentle magnetic
+        // resistance without forcing hard full-page jumps.
+        let snapTimer: ReturnType<typeof setTimeout>;
+        const onScroll = () => {
+            if (lenisStore.stopped) return;
+            clearTimeout(snapTimer);
+            snapTimer = setTimeout(() => {
+                if (lenisStore.stopped) return;
+
+                const sections = Array.from(
+                    document.querySelectorAll("section[id]")
+                ) as HTMLElement[];
+
+                const mid   = window.innerHeight / 2;
+                const limit = window.innerHeight * SNAP_RADIUS;
+                let bestEl: HTMLElement | null = null;
+                let bestDist = Infinity;
+
+                for (const el of sections) {
+                    const rect   = el.getBoundingClientRect();
+                    const centre = rect.top + rect.height / 2;
+                    const dist   = Math.abs(centre - mid);
+                    if (dist < bestDist) { bestDist = dist; bestEl = el; }
+                }
+
+                // 20px dead-zone so we don't re-snap a section already centred
+                if (bestEl && bestDist > 20 && bestDist < limit) {
+                    lenis.scrollTo(bestEl, {
+                        offset:   -(window.innerHeight - bestEl.offsetHeight) / 2,
+                        duration: 0.55,
+                        easing:   (t: number) => 1 - Math.pow(1 - t, 3),
+                    });
+                }
+            }, 120);
+        };
+
+        lenis.on("scroll", onScroll);
+
         return () => {
+            clearTimeout(snapTimer);
             gsap.ticker.remove(tick);
             lenis.destroy();
             lenisStore.instance = null;
+            lenisStore.stopped  = false;
         };
     }, []);
 }
