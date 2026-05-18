@@ -12,10 +12,10 @@ export function About() {
                     architected and shipped accounting tools, an <strong>AI chatbot</strong> that lets
                     accountants query live client data in plain English via NL2SQL, and CI/CD pipelines
                     across GCP and Azure. Before that, a year at <strong>Jaguar Land Rover</strong> on the
-                    VITAL V&amp;V team — running HIL rig tests against live ECU signals using dSPACE and
+                    VITAL V&amp;V team running HIL rig tests against live ECU signals using dSPACE and
                     MATLAB. On the side I maintain <strong>YMAT</strong>, a personal finance app with open
                     banking integration, and a <strong>Rust liquidation bot</strong> targeting the MarginFi
-                    protocol on Solana mainnet — operating with live capital.
+                    protocol on Solana mainnet operating with live capital.
                 </p>
 
                 <div className={styles.meta}>
