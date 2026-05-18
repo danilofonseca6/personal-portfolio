@@ -159,6 +159,7 @@ const SECTION_SHAPES: { id: string; shape: ShapeKey; groupX: number }[] = [
     { id: "exp-jlr",     shape: "jaguarLeap",  groupX:  2.2 },
     { id: "exp-ymat",    shape: "sphere",      groupX: -2.2 },
     { id: "now-working", shape: "icosahedron", groupX:  2.2 },
+    { id: "contact",     shape: "torusKnot",   groupX:  0   },
 ];
 
 // ─── Scene ────────────────────────────────────────────────────────────────────
@@ -267,7 +268,13 @@ function Scene() {
             if (!el) return null;
             const apply = () => {
                 targetShape.current = shape;
-                if (shape === "pointCloud") startWander(); else stopWander();
+                if (shape === "pointCloud") {
+                    startWander();
+                    gsap.to(group.rotation, { x: 0, y: 0, duration: 1.0, ease: "power2.out" });
+                } else {
+                    stopWander();
+                    gsap.to(group.position, { y: 0, duration: 0.8, ease: "power2.out" });
+                }
                 gsap.to(group.position, { x: groupX, duration: 1.2, ease: "power2.inOut" });
             };
             return ScrollTrigger.create({
@@ -327,28 +334,26 @@ function Scene() {
 
     const mat4 = useMemo(() => new THREE.Matrix4(), []);
 
-    useFrame(({ camera }) => {
+    useFrame(({ camera, clock }) => {
         const group = groupRef.current;
         if (!group) return;
 
-        // lerp camera z toward whatever cameraStore requests (card zoom-in / zoom-out)
         camera.position.z += (cameraTarget.z - camera.position.z) * 0.06;
 
-        // auto-rotate only once a 3D shape is visible and enough time has passed since last drag
-        const resting = !isDragging.current && (performance.now() - dragEndedAt.current > RESUME_MS);
-        if (resting && targetShape.current !== "pointCloud") group.rotation.y += AUTO_ROT_Y;
+        const isCloud  = targetShape.current === "pointCloud";
+        const isJaguar = targetShape.current === "jaguarLeap";
 
-        // drag rotation disabled in hero (pointCloud) mode
-        if (targetShape.current !== "pointCloud" && (dragDeltaY.current !== 0 || dragDeltaX.current !== 0)) {
+        const resting = !isDragging.current && (performance.now() - dragEndedAt.current > RESUME_MS);
+        if (resting && !isCloud) group.rotation.y += AUTO_ROT_Y;
+
+        if (!isCloud && (dragDeltaY.current !== 0 || dragDeltaX.current !== 0)) {
             group.rotation.y += dragDeltaY.current;
             group.rotation.x += dragDeltaX.current;
         }
         dragDeltaY.current = 0;
         dragDeltaX.current = 0;
 
-        const isCloud = targetShape.current === "pointCloud";
-        const target  = shapes[targetShape.current];
-
+        const target = shapes[targetShape.current];
         positions.current.forEach((p, i) => {
             p.lerp(isCloud ? wanderTgts.current[i]! : target[i]!, LERP);
             mat4.makeTranslation(p.x, p.y, p.z);
@@ -356,8 +361,6 @@ function Scene() {
         });
         nodesMesh.instanceMatrix.needsUpdate = true;
 
-        // Toggle which line mesh is visible
-        const isJaguar = targetShape.current === "jaguarLeap";
         knnLineMesh.visible    = !isJaguar;
         jaguarLineMesh.visible =  isJaguar;
 
@@ -405,7 +408,7 @@ export function PortfolioBackground() {
     useEffect(() => {
         const wrapper = wrapperRef.current;
         if (!wrapper) return;
-        const t = gsap.fromTo(wrapper, { opacity: 1 }, {
+        const t1 = gsap.fromTo(wrapper, { opacity: 1 }, {
             opacity: 0.25,
             ease: "none",
             scrollTrigger: {
@@ -415,7 +418,9 @@ export function PortfolioBackground() {
                 scrub: 0.8,
             },
         });
-        return () => { t.scrollTrigger?.kill(); t.kill(); };
+        return () => {
+            t1.scrollTrigger?.kill(); t1.kill();
+        };
     }, []);
 
     return (

@@ -7,7 +7,7 @@ export function NowWorking() {
             <article className={styles.card}>
                 <div className={styles.label}>
                     <span className={styles.dot} />
-                    <span>now</span>
+                    <span>ongoing</span>
                 </div>
                 <h2 className={styles.title}>
                     building a solana liquidation bot

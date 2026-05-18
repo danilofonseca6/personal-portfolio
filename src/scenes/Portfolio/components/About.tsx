@@ -19,7 +19,7 @@ export function About() {
                 </p>
 
                 <div className={styles.meta}>
-                    <span className={styles.metaItem}>danilodavidfonseca@gmail.com · 07578 717474</span>
+                    <span className={styles.metaItem}>danilodavidfonseca@gmail.com </span>
                     <span className={styles.metaItem}>MSc Software Engineering · University of Warwick</span>
                     <span className={styles.metaItem}>Open to remote / relocation</span>
                 </div>

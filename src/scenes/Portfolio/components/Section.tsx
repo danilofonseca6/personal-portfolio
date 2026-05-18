@@ -10,10 +10,11 @@ type SectionProps = {
     side?: "left" | "right" | "center";
     wide?: boolean;
     compact?: boolean;
+    top?: boolean;
     children: ReactNode;
 };
 
-export function Section({ id, side = "left", wide = false, compact = false, children }: SectionProps) {
+export function Section({ id, side = "left", wide = false, compact = false, top = false, children }: SectionProps) {
     const sectionRef = useRef<HTMLElement>(null);
     const cardRef = useRef<HTMLDivElement>(null);
 
@@ -48,7 +49,7 @@ export function Section({ id, side = "left", wide = false, compact = false, chil
 
     return (
         <section id={id} ref={sectionRef} className={`${styles.section} ${compact ? styles.sectionCompact : ""}`}>
-            <div className={`${styles.content} ${compact ? styles.contentCompact : ""}`}>
+            <div className={`${styles.content} ${compact ? styles.contentCompact : ""} ${top ? styles.contentTop : ""}`}>
                 <div ref={cardRef} className={cardClass}>
                     {children}
                 </div>

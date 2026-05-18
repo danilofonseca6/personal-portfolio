@@ -57,3 +57,7 @@
     width: 100%;
     pointer-events: auto;
 }
+
+.contentTop {
+    align-items: flex-start;
+}

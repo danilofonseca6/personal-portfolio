@@ -48,7 +48,7 @@ export default function App() {
     const diveProgressRef = useRef(0);
     const sceneRef        = useRef<"terminal" | "awake">("terminal");
 
-    const [scene, setScene] = useState<"terminal" | "awake">("terminal");
+    const [scene, setScene] = useState<"terminal" | "awake">("awake");
     const [flashOpacity, setFlashOpacity] = useState(0);
 
     useEffect(() => {
