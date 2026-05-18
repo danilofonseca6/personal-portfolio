@@ -80,3 +80,15 @@
     font-size: var(--type-sm);
     color: var(--green);
 }
+
+@media (max-width: 768px) {
+    .heading {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .headingSpace {
+        display: none;
+    }
+}

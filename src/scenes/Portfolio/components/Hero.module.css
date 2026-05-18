@@ -12,6 +12,8 @@
 .content {
     position: relative;
     z-index: 1;
+    min-width: 0;
+    width: 100%;
 }
 
 .name {
@@ -24,6 +26,11 @@
     margin: 0;
 }
 
+.word {
+    display: inline-block;
+    white-space: nowrap;
+}
+
 .letter {
     display: inline-block;
 }
@@ -31,3 +38,16 @@
 .space {
     display: inline-block;
 }
+
+@media (max-width: 768px) {
+    .name {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .space {
+        display: none;
+    }
+}
+

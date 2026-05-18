@@ -9,15 +9,15 @@ export function Hero() {
         const el = nameRef.current;
         if (!el) return;
 
-        const name = el.textContent ?? "";
+        const name = (el.textContent ?? "").trim();
         el.innerHTML = name
-            .split("")
-            .map((char) =>
-                char === " "
-                    ? `<span class="${styles.space}">&nbsp;</span>`
-                    : `<span class="${styles.letter}">${char}</span>`
+            .split(" ")
+            .map((word) =>
+                `<span class="${styles.word}">${
+                    word.split("").map((ch) => `<span class="${styles.letter}">${ch}</span>`).join("")
+                }</span>`
             )
-            .join("");
+            .join(`<span class="${styles.space}">&nbsp;</span>`);
 
         const letters = el.querySelectorAll(`.${styles.letter}`);
 

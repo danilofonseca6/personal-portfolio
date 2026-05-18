@@ -10,7 +10,11 @@ export function Contact() {
                     Contact
                 </p>
 
-                <h2 className={styles.heading}>Get in touch</h2>
+                <h2 className={styles.heading}>
+                    <span className={styles.headingPart}>Get in</span>
+                    <span className={styles.headingSpace}> </span>
+                    <span className={styles.headingPart}>touch</span>
+                </h2>
 
                 <div className={styles.rows}>
                     <a href="mailto:danilodavidfonseca@gmail.com" className={styles.row}>
