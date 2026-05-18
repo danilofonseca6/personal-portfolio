@@ -18,7 +18,7 @@
 
 .name {
     font-family: var(--font-mono);
-    font-size: var(--type-hero);
+    font-size: clamp(2.5rem, 12vw, var(--type-hero));  /* ← was just var(--type-hero) */
     font-weight: 400;
     color: var(--fg);
     letter-spacing: -0.03em;

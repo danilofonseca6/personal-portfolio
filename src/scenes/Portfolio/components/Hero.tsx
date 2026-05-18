@@ -9,9 +9,9 @@ export function Hero() {
         const el = nameRef.current;
         if (!el) return;
 
-        const name = (el.textContent ?? "").trim();
-        el.innerHTML = name
-            .split(" ")
+        const words = ["Danilo", "Fonseca"];  // ← hardcode, don't parse from DOM
+
+        el.innerHTML = words
             .map((word) =>
                 `<span class="${styles.word}">${
                     word.split("").map((ch) => `<span class="${styles.letter}">${ch}</span>`).join("")

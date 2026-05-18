@@ -38,7 +38,7 @@
 
 .heading {
     font-family: var(--font-sans);
-    font-size: var(--type-2xl);
+    font-size: clamp(1.75rem, 7vw, var(--type-2xl));  /* ← was just var(--type-2xl) */
     font-weight: 500;
     color: var(--fg);
     margin: 0 0 var(--s-3);
@@ -79,7 +79,10 @@
     font-family: var(--font-mono);
     font-size: var(--type-sm);
     color: var(--green);
+    min-width: 0;                 /* ← lets flex item shrink */
+    overflow-wrap: anywhere;      /* ← breaks long emails/URLs */
 }
+
 
 @media (max-width: 768px) {
     .heading {
@@ -87,8 +90,17 @@
         flex-direction: column;
         align-items: flex-start;
     }
-
     .headingSpace {
         display: none;
+    }
+
+    /* ↓ NEW: stack key above value on mobile */
+    .row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--s-1);
+    }
+    .rowKey {
+        width: auto;
     }
 }
