@@ -334,10 +334,9 @@ function Scene() {
 
     const mat4 = useMemo(() => new THREE.Matrix4(), []);
 
-    useFrame(({ camera, clock }) => {
+    useFrame(({ camera }) => {
         const group = groupRef.current;
         if (!group) return;
-
         camera.position.z += (cameraTarget.z - camera.position.z) * 0.06;
 
         const isCloud  = targetShape.current === "pointCloud";
